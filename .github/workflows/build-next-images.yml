@@ -17,26 +17,10 @@ permissions:
   id-token: write
 
 jobs:
-  build-images:
-    name: Build Next Image (${{ matrix.display }})
+  binaries:
+    name: Build Binaries
     runs-on: depot-ubuntu-24.04-16
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: manager
-            display: Arcane
-            needs-frontend: true
-            build-flags: "--docker"
-            dockerfile: docker/Dockerfile-static
-            image-suffix: arcane
-          - target: agent
-            display: Arcane Headless
-            needs-frontend: false
-            build-flags: "--docker --agent"
-            dockerfile: docker/Dockerfile-agent-static
-            image-suffix: arcane-headless
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -46,13 +30,11 @@ jobs:
         run: echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm
-        if: matrix.needs-frontend
         uses: pnpm/action-setup@v4
         with:
           run_install: false
 
       - name: Setup Node.js
-        if: matrix.needs-frontend
         uses: actions/setup-node@v6
         with:
           node-version: 25
@@ -64,6 +46,55 @@ jobs:
           go-version-file: "backend/go.mod"
           cache: true
           cache-dependency-path: backend/go.sum
+
+      - name: Install frontend dependencies
+        run: pnpm -C frontend install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm -C frontend build
+
+      - name: Build manager binaries
+        run: bash scripts/github/build-binaries.sh
+        env:
+          VERSION: next
+          REVISION: ${{ steps.short-sha.outputs.value }}
+
+      - name: Build agent binaries
+        run: bash scripts/github/build-binaries.sh --agent
+        env:
+          VERSION: next
+          REVISION: ${{ steps.short-sha.outputs.value }}
+
+      - name: Binary attestation
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: "backend/.bin/*"
+
+      - name: Upload binaries artifact
+        uses: actions/upload-artifact@v5
+        with:
+          path: backend/.bin/*
+          name: binaries
+
+  images:
+    name: Build Next Image (${{ matrix.display }})
+    runs-on: depot-ubuntu-24.04-16
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: manager
+            display: Arcane
+            dockerfile: docker/Dockerfile
+            image-suffix: arcane
+          - target: agent
+            display: Arcane Headless
+            dockerfile: docker/Dockerfile-agent
+            image-suffix: arcane-headless
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - name: Set up Depot CLI
         uses: depot/setup-action@v1
@@ -81,20 +112,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install frontend dependencies
-        if: matrix.needs-frontend
-        run: pnpm --filter arcane-frontend install --frozen-lockfile
-
-      - name: Build frontend
-        if: matrix.needs-frontend
-        run: pnpm --filter arcane-frontend build
-
-      - name: Build binaries
-        run: bash scripts/github/build-binaries.sh ${{ matrix.build-flags }}
-        env:
-          VERSION: next
-          REVISION: ${{ steps.short-sha.outputs.value }}
-
       - name: Build and push container image
         id: build-push-image
         uses: depot/build-push-action@v1
@@ -104,6 +121,9 @@ jobs:
           push: true
           tags: ${{ steps.image-name.outputs.value }}:next
           file: ${{ matrix.dockerfile }}
+          build-args: |
+            VERSION=next
+            REVISION=${{ github.sha }}
           sbom: true
           sbom-dir: sbom-output/${{ matrix.target }}
           provenance: true
@@ -114,20 +134,6 @@ jobs:
           path: sbom-output/${{ matrix.target }}
           name: SBOM-${{ matrix.target }}
 
-      - name: Upload binaries artifact
-        if: matrix.target == 'manager'
-        uses: actions/upload-artifact@v5
-        with:
-          path: backend/.bin/*
-          name: binaries-${{ matrix.target }}
-
-      - name: Upload binaries artifact
-        if: matrix.target == 'agent'
-        uses: actions/upload-artifact@v5
-        with:
-          path: backend/.bin/*
-          name: binaries-${{ matrix.target }}
-
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v3
         with:
@@ -136,9 +142,9 @@ jobs:
           push-to-registry: true
 
   release-next:
-    name: Release Next (Pre-release)
+    name: Create Pre-release
     runs-on: depot-ubuntu-24.04-16
-    needs: build-images
+    needs: [binaries, images]
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -150,17 +156,11 @@ jobs:
         id: short-sha
         run: echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Download manager binaries
+      - name: Download binaries
         uses: actions/download-artifact@v6
         with:
-          name: binaries-manager
-          path: binaries/manager
-
-      - name: Download agent binaries
-        uses: actions/download-artifact@v6
-        with:
-          name: binaries-agent
-          path: binaries/agent
+          name: binaries
+          path: binaries
 
       - name: Download manager SBOM
         uses: actions/download-artifact@v6
@@ -174,25 +174,12 @@ jobs:
           name: SBOM-agent
           path: sbom/agent
 
-      - name: Prepare release binaries
-        run: |
-          mkdir -p release-binaries
-          cp binaries/manager/* release-binaries/ 2>/dev/null || true
-          cp binaries/agent/* release-binaries/ 2>/dev/null || true
-          ls -la release-binaries/
-
       - name: Prepare SBOM artifacts
         run: |
           mkdir -p release-sbom
-          # Package SBOMs as zip files for cleaner release assets
           cd sbom/manager && zip -r ../../release-sbom/sbom-arcane.zip . && cd ../..
           cd sbom/agent && zip -r ../../release-sbom/sbom-arcane-headless.zip . && cd ../..
           ls -la release-sbom/
-
-      - name: Binary attestation
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-path: "release-binaries/*"
 
       - name: Generate release notes
         run: |
@@ -202,13 +189,14 @@ jobs:
           COMMIT_AUTHOR=$(git log -1 --pretty=%an)
           COMMIT_DATE=$(git log -1 --pretty=%ci)
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="${{ github.repository }}"
 
           cat << EOF > release-notes.md
           This pre-release is automatically built and generated on every commit to main.
 
           > [!WARNING]
           > This is a nightly build, not a tagged release. We recommend using tagged releases.
-          > You can find tagged releases on the [releases page](https://github.com/${{ github.repository }}/releases/latest).
+          > You can find tagged releases on the [releases page](https://github.com/${REPO}/releases/latest).
 
           ---
 
@@ -216,7 +204,7 @@ jobs:
 
           | Property | Value |
           |----------|-------|
-          | **Commit** | [\`${SHORT_SHA}\`](https://github.com/${{ github.repository }}/commit/${COMMIT_SHA}) |
+          | **Commit** | [\`${SHORT_SHA}\`](https://github.com/${REPO}/commit/${COMMIT_SHA}) |
           | **Author** | ${COMMIT_AUTHOR} |
           | **Date** | ${COMMIT_DATE} |
           | **Branch** | \`main\` |
@@ -238,16 +226,33 @@ jobs:
           \`\`\`
           EOF
 
-      - name: Create pre-release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: next
-          name: Next (Pre-release)
-          body_path: release-notes.md
-          prerelease: true
-          make_latest: false
-          target_commitish: main
-          overwrite_files: true
-          files: |
-            release-binaries/*
-            release-sbom/*
+      - name: Delete existing next release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete next --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create next \
+            --title "Next (Pre-release)" \
+            --notes-file release-notes.md \
+            --prerelease \
+            --draft \
+            --target main
+
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload next binaries/*
+
+      - name: Upload SBOMs to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload next release-sbom/*
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit next --draft=false

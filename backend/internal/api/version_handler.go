@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ofkm/arcane-backend/internal/services"
+	"github.com/getarcaneapp/arcane/backend/internal/services"
 )
 
 type VersionHandler struct {

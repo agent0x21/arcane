@@ -12,7 +12,7 @@ import (
 
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/ofkm/arcane-backend/internal/models"
+	"github.com/getarcaneapp/arcane/backend/internal/models"
 )
 
 var (

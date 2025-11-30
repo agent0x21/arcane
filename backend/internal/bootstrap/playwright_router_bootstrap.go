@@ -6,8 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ofkm/arcane-backend/internal/api"
-	"github.com/ofkm/arcane-backend/internal/services"
+	"github.com/getarcaneapp/arcane/backend/internal/api"
+	"github.com/getarcaneapp/arcane/backend/internal/services"
 )
 
 func init() {

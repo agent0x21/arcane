@@ -8,7 +8,6 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { Spinner } from '$lib/components/ui/spinner/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import * as Card from '$lib/components/ui/card/index.js';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -36,6 +35,8 @@
 	import FlexRender from '$lib/components/ui/data-table/flex-render.svelte';
 	import { DataTableViewOptions } from '$lib/components/arcane-table/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+
+	type FieldVisibility = Record<string, boolean>;
 
 	let {
 		containers = $bindable(),
@@ -239,13 +240,11 @@
 {/snippet}
 
 {#snippet ContainerMobileCardSnippet({
-	row,
 	item,
 	mobileFieldVisibility
 }: {
-	row: any;
 	item: ContainerSummaryDto;
-	mobileFieldVisibility: Record;
+	mobileFieldVisibility: FieldVisibility;
 })}
 	<UniversalMobileCard
 		{item}
@@ -409,11 +408,11 @@
 	</DropdownMenu.CheckboxItem>
 {/snippet}
 
-{#snippet GroupedTableView({ table }: { table: TableType })}
-	<div class="mb-4 flex items-center justify-end border-b px-6 py-4">
+{#snippet GroupedTableView({ table, renderPagination }: { table: TableType<ContainerSummaryDto>; renderPagination: import('svelte').Snippet })}
+	<div class="flex items-center justify-end border-b px-6 py-2">
 		<DataTableViewOptions {table} customViewOptions={CustomViewOptions} />
 	</div>
-	<div class="space-y-4 px-6 pb-6">
+	<div class=" space-y-4 px-6 py-2">
 		{#each groupedContainers() ?? [] as [projectName, projectContainers] (projectName)}
 			{@const projectContainerIds = new Set(projectContainers.map((c) => c.id))}
 			{@const projectRows = table
@@ -465,7 +464,7 @@
 
 				<div class="space-y-3 md:hidden">
 					{#each projectRows as row (row.id)}
-						{@render ContainerMobileCardSnippet({ row, item: row.original as ContainerSummaryDto, mobileFieldVisibility })}
+						{@render ContainerMobileCardSnippet({ item: row.original as ContainerSummaryDto, mobileFieldVisibility })}
 					{:else}
 						<div class="h-24 flex items-center justify-center text-center text-muted-foreground">
 							{m.common_no_results_found()}
@@ -474,5 +473,9 @@
 				</div>
 			</DropdownCard>
 		{/each}
+	</div>
+
+	<div class="shrink-0 border-t px-2 py-4">
+		{@render renderPagination()}
 	</div>
 {/snippet}

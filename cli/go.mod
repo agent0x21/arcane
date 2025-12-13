@@ -8,7 +8,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.10.2
-	go.getarcane.app/types v1.0.0-beta2
+	go.getarcane.app/types v1.0.0-beta3
 	go.withmatt.com/size v0.0.0-20250220224316-11aee5773e67
 	golang.org/x/term v0.38.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -35,7 +35,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.11
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	go.getarcane.app/types v1.0.0-beta2
+	go.getarcane.app/types v1.0.0-beta3
 	go.podman.io/image/v5 v5.38.0
 	golang.org/x/crypto v0.46.0
 	golang.org/x/oauth2 v0.34.0

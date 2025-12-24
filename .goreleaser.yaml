@@ -101,7 +101,17 @@ builds:
     mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
-  - formats:
+  - id: arcane-cli
+    ids:
+      - arcane-cli
+    formats:
+      - tar.gz
+    name_template: '{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
+  - id: default
+    ids:
+      - arcane
+      - arcane-agent
+    formats:
       - binary
     name_template: '{{ .Binary }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}'
 

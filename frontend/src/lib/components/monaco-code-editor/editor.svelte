@@ -100,6 +100,12 @@
 			fontSize: parseInt(fontSize.replace('px', '')),
 			minimap: { enabled: false },
 			scrollBeyondLastLine: false,
+			quickSuggestions: {
+				other: true,
+				comments: false,
+				strings: true
+			},
+			suggestOnTriggerCharacters: true,
 			fontFamily:
 				'"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 			padding: { top: 10, bottom: 10 },
